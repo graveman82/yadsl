@@ -1,0 +1,15 @@
+*.[oa]
+*.obj
+*.dll
+*.exe
+*.lib
+*~
+*.layout
+*.depend
+*.ncb
+*.user
+/msvc2008_proj/**/Debug/
+!/msvc2008_proj/**/Debug/Readme.txt
+/msvc2008_proj/**/Release/
+!/msvc2008_proj/**/Release/Readme.txt
+
