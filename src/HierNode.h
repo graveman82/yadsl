@@ -11,7 +11,7 @@ namespace yadsl
 class HierarchyNode {
 public:
     typedef wxSharedPtr<HierarchyNode> NodePtr;
-    typedef std::list <NodePtr, ListAllocator<NodePtr > > ChildList;
+    typedef std::list <NodePtr, StlListAllocator<NodePtr > > ChildList;
 
     // Предикат для поиска по сырому указателю
     class FindPred{

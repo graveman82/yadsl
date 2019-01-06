@@ -4,6 +4,7 @@
 #include <vector>
 #include <algorithm>
 
+#define YADSL_UNUSED_FUNC_PARAM(x) (void)(x)
 #define YADSL_RELEASE_COM(x) if ((x) != 0) { (x)->Release(); (x) = 0; }
 
 namespace yadsl {

@@ -1,6 +1,11 @@
 #ifndef YADSL_BASETYPES_H
 #define YADSL_BASETYPES_H
 
+/** @file BaseTypes.h
+
+Base types used by the library: integers, floats etc.
+*/
+
 namespace yadsl
 {
 
@@ -23,8 +28,6 @@ typedef unsigned __int64	uint64_t;
 typedef uint32_t uint;
 
 } // end of yadsl
-
-#define YADSL_UNUSED_FUNC_PARAM(x) (void)(x)
 
 #endif // YADSL_BASETYPES_H
 
