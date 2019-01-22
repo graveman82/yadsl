@@ -18,6 +18,10 @@
 #include <list>
 #endif
 
+/** @file EC_Manager.h.
+
+Менеджер компоненты.
+*/
 
 namespace yadsl
 {
@@ -33,9 +37,15 @@ enum Ec_Kind {
 /** @brief Менеджер компоненты сущности.
 @param N максимальное число компонент такого же типа в одной сущности.
 */
-template <typename T, int Kind = kEc_Kind_Pod, int N = 1>
+template <typename T, int Kind = kEc_Kind_Pod, int N = 1, int kCacheCap = 2>
 class Ec_Manager {
     typedef Entity* PEntity;
+
+    struct CachePair {
+        PEntity entity_;
+        T* component_;
+    };
+
 public:
 #ifdef YADSL_USE_OWNLIST_IN_ENTITY
     typedef List<PEntity, kPOD_LIST> EntityAccessPoints;
@@ -52,6 +62,9 @@ private: // vars
 
     // контейнер точек доступа к экземплярам сущностей, которые содержат данную компоненту
     EntityAccessPoints owners_[N];
+
+    CachePair cache_[kCacheCap]; // кэш для доступа к компонентам сущностей, с которыми работали в прошлый раз
+    uint cacheIndex_; // индекс в кэше, куда будет записана очередная пара указателей
 
 private: // methods
 
@@ -122,7 +135,7 @@ private: // methods
     }
 
 public:
-    Ec_Manager() {
+    Ec_Manager() : cacheIndex_(0) {
         id_ = Entity::GenerateComponentId();
         if (NeedMem()) {
             memPool_ =  new ClassInstanceMemBlockPool <T>;
@@ -164,10 +177,20 @@ public:
 #ifdef YADSL_USE_WXDEBUG
         wxASSERT(entity != 0);
 #endif
+        // Поиск в кэше
+        for (uint i = 0; i < kCacheCap; i++) {
+            if (cache_[i].entity_ == entity) {
+                return cache_[i].component_;
+            }
+        }
         void* p = 0;
         if (GetComponentMem(entity, &p, componentIndex)) {
             if (p == 0) return 0;
-            return ConvertToComponentType(p);
+            T* component = ConvertToComponentType(p);
+            cache_[cacheIndex_].entity_ = entity;
+            cache_[cacheIndex_].component_ = component;
+            if (++cacheIndex_ == kCacheCap) cacheIndex_ = 0;
+            return component;
         }
         return 0;
     }

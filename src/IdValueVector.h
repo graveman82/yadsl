@@ -12,24 +12,38 @@
 
 #include "BaseTypes.h"
 
+/// флаг включения теста для класса вектора с возможностью хранение пар "идентификатор-значение". Включать только при тестировании вектора (негативно сказывается на производительности)
+#define YADSL_TEST_IDVALUEVECTOR 0
+#if YADSL_TEST_IDVALUEVECTOR
+#include <algorithm>
+#include <wx/wx.h>
+#endif
 namespace yadsl
 {
 
-// Элемент вектора IdValueVector
+
+/** @brief Элемент вектора IdValueVector и IdValueMultiVector.
+Данные хранятся в векторе не в прямом виде, а внутри этого класса - экземпляр типа данных вложен в этот класс.
+Обратиться непосредственно к самим данным можно через метод GetValue(), который возвращает ссылку на экземпляр типа данных.
+@code
+elem->GetValue().<member>
+@endcode
+*/
 template <typename T>
 class IdValueVectorElement {
-public:
-    enum { /** @brief Недопустмое значение идентификатора. */ kNoId = 0xffffffff  };
-
 private:
     uint id_;   // Идентификатор (имя) элемента
     T value_;   // Значение элемента
 
 public:
     IdValueVectorElement(uint id = kNoId) : id_(id) {}
+    /// Доступ к идентификатору
     uint GetId() const { return id_; }
+    /// Доступ к значению (чтение)
     const T& GetValue() const { return value_; }
+    /// Доступ к значению (чтение и запись)
     T& GetValue() { return value_; }
+    /// Изменение значения
     void SetValue(const T& value) { value_ = value; }
 
     bool operator < (const IdValueVectorElement<T>& oth) const { return id_ < oth.id_; }
@@ -37,7 +51,28 @@ public:
     bool operator != (const IdValueVectorElement<T>& oth) const { return !(*this == oth); }
 };
 
-/** @brief Вектор, в котором поддерживается упорядоченность элементов. */
+/** @brief Вектор, в котором поддерживается упорядоченность элементов.
+Пример использования:
+@code
+struct Person {
+    std::string name_;
+    int age_;
+};
+IdValueVector<Person> v;
+uint JamesCameronId = 2029;
+Person director;
+director.name_ = "James Cameron";
+director.age_ = 64;
+v.Insert(JamesCameronId, director);
+IdValueVectorElement<Person>* elem = v.Find(JamesCameronId);
+printf("Person(%d): %s %d years old\n",
+       JamesCameronId,
+       elem->GetValue().name_.c_str(),
+       elem->GetValue().age_);
+v.Erase(JamesCameronId);
+printf("Is vector empty? %s\n", v.Size() == 0 ? "yes" : "no");
+@endcode
+*/
 template <typename T>
 class IdValueVector {
 public:
@@ -47,28 +82,39 @@ public:
 private:
     ElementVec v_;
 
+#if YADSL_TEST_IDVALUEVECTOR
+    bool IsSorted() const {
+        ElementVec vcopy = v_;
+        std::stable_sort(vcopy.begin(), vcopy.end());
+        for (size_t i = 0; i < v_.size(); i++) {
+            if (v_[i] != vcopy[i]) return false;
+        }
+        return true;
+    }
+
+#endif
 public:
     /** @brief Поиск элемента в векторе по заданному идентификатору.
     @return указатель на элемент или 0.
     @note указатель действителен до первой операции вставки или стирания элемента в векторе.
     */
     Element* Find(uint id) {
-        Element elemToFound(id);
-        typename ElementVec::iterator start = std::lower_bound(v_.begin(), v_.end(), elemToFound);
-        typename ElementVec::iterator end = std::upper_bound(v_.begin(), v_.end(), elemToFound);
-        /* Случай 1 - v: e1, e2, ..., eN, где eN < elemToFound. Тогда:
+        Element elemToFind(id);
+        typename ElementVec::iterator start = std::lower_bound(v_.begin(), v_.end(), elemToFind);
+        typename ElementVec::iterator end = std::upper_bound(v_.begin(), v_.end(), elemToFind);
+        /* Случай 1 - v: e1, e2, ..., eN, где eN < elemToFind. Тогда:
         start:  v_.end();
         end:    v_.end().
 
-        Случай 2 - v: e1, e2, ..., eN, где eN = elemToFound. Тогда:
+        Случай 2 - v: e1, e2, ..., eN, где eN = elemToFind. Тогда:
         start:  eN;
         end:    v_.end().
 
-        Случай 3 - v: e1, e2, ..., eN-1, eN, где eN-1 = elemToFound, eN > elemToFound. Тогда:
+        Случай 3 - v: e1, e2, ..., eN-1, eN, где eN-1 = elemToFind, eN > elemToFind. Тогда:
         start:  eN-1;
         end:    eN.
 
-        Случай 3 - v: e1, e2, ..., eN, где eN > elemToFound. Тогда:
+        Случай 3 - v: e1, e2, ..., eN, где eN > elemToFind. Тогда:
         start:  eN;
         end:    eN.
 
@@ -82,22 +128,29 @@ public:
     }
 
     /** @brief Вставка элемента с заданным идентификатором и значением.
-    @return true, если элемент был вставлен, false - в обратном случае.
+
+    Вставляется копия элемента.
+    @param id идентификатор нового элемента.
+    @param value значение нового элемента.
+    @return true, если элемент был вставлен, false - в обратном случае (когда элемент с таким идентификатором уже присутствует в контейнере).
     */
     bool Insert(uint id, const T& value) {
-        Element elemToFound(id);
-        typename ElementVec::iterator start = std::lower_bound(v_.begin(), v_.end(), elemToFound);
-        typename ElementVec::iterator end = std::upper_bound(v_.begin(), v_.end(), elemToFound);
+        Element elemToFind(id);
+        typename ElementVec::iterator start = std::lower_bound(v_.begin(), v_.end(), elemToFind);
+        typename ElementVec::iterator end = std::upper_bound(v_.begin(), v_.end(), elemToFind);
         if (start != end) {
             return false;
         }
-        elemToFound.SetValue(value);
+        elemToFind.SetValue(value);
         if (start == v_.end()) {
-            v_.push_back(elemToFound);
+            v_.push_back(elemToFind);
         }
         else {
-            v_.insert(start, elemToFound);
+            v_.insert(start, elemToFind);
         }
+#if YADSL_TEST_IDVALUEVECTOR
+        wxASSERT(IsSorted());
+#endif
         return true;
     }
 
@@ -108,14 +161,20 @@ public:
     @return Если элемент найден, возвращается его копия, если нет - элемент, инициализированный значением по умолчанию.
     */
     Element Erase(uint id) {
-        Element elemToFound(id) ;
-        typename ElementVec::iterator start = std::lower_bound(v_.begin(), v_.end(), elemToFound);
-        typename ElementVec::iterator end = std::upper_bound(v_.begin(), v_.end(), elemToFound);
+        Element elemToFind(id) ;
+        typename ElementVec::iterator start = std::lower_bound(v_.begin(), v_.end(), elemToFind);
+        typename ElementVec::iterator end = std::upper_bound(v_.begin(), v_.end(), elemToFind);
         if (start != v_.end() && start != end) {
-            elemToFound.SetValue(start->GetValue());
+            elemToFind.SetValue(start->GetValue());
             v_.erase(start);
-            return elemToFound;
+#if YADSL_TEST_IDVALUEVECTOR
+            wxASSERT(IsSorted());
+#endif
+            return elemToFind;
         }
+#if YADSL_TEST_IDVALUEVECTOR
+        wxASSERT(IsSorted());
+#endif
         return Element();
     }
 
@@ -138,19 +197,32 @@ public:
 
 private:
     ElementVec v_;
+#if YADSL_TEST_IDVALUEVECTOR
+    bool IsSorted() const {
+        ElementVec vcopy = v_;
+        std::stable_sort(vcopy.begin(), vcopy.end());
+        for (size_t i = 0; i < v_.size(); i++) {
+            if (v_[i] != vcopy[i]) return false;
+        }
+        return true;
+    }
 
+#endif
 public:
+
+    typename ElementVec::iterator EndIterator() { return v_.end(); }
+
     /** @brief Поиск элемента в векторе по заданному идентификатору.
-    @param start - итератор вектора, содежащий позицию первого элемента, равного или большего, чем заданный.
-    @param start - итератор вектора, содежащий позицию первого элемента, большего, чем заданный.
+    @param start[out] - итератор вектора, содежащий позицию первого элемента, равного или большего, чем заданный.
+    @param end[out] - итератор вектора, содежащий позицию первого элемента, большего, чем заданный.
     @return true, если элемент будет найден.
     */
     bool Find(uint id,
               typename ElementVec::iterator& start,
               typename ElementVec::iterator& end ) {
-        Element elemToFound(id);
-        start = std::lower_bound(v_.begin(), v_.end(), elemToFound);
-        end = std::upper_bound(v_.begin(), v_.end(), elemToFound);
+        Element elemToFind(id);
+        start = std::lower_bound(v_.begin(), v_.end(), elemToFind);
+        end = std::upper_bound(v_.begin(), v_.end(), elemToFind);
 
         if (start != end) {
             return true;
@@ -161,34 +233,42 @@ public:
     /** @brief Вставка элемента с заданным идентификатором и значением.
     */
     void Insert(uint id, const T& value) {
-        Element elemToFound(id);
-        typename ElementVec::iterator start = std::lower_bound(v_.begin(), v_.end(), elemToFound);
-        typename ElementVec::iterator end = std::upper_bound(v_.begin(), v_.end(), elemToFound);
+        Element elemToFind(id);
+        typename ElementVec::iterator end = std::upper_bound(v_.begin(), v_.end(), elemToFind);
 
-        elemToFound.SetValue(value);
-        if (start == v_.end()) {
-            v_.push_back(elemToFound);
+        elemToFind.SetValue(value);
+        if (end == v_.end()) {
+            v_.push_back(elemToFind);
         }
         else {
-            v_.insert(start, elemToFound);
+            v_.insert(end, elemToFind);
         }
+#if YADSL_TEST_IDVALUEVECTOR
+        wxASSERT(IsSorted());
+#endif
     }
 
-    /** @brief Стереть элементы с заданным идентификатором.
+    /** @brief Стереть все элементы с заданным идентификатором.
     */
     void Erase(uint id) {
-        Element elemToFound(id) ;
-        typename ElementVec::iterator start = std::lower_bound(v_.begin(), v_.end(), elemToFound);
-        typename ElementVec::iterator end = std::upper_bound(v_.begin(), v_.end(), elemToFound);
+        Element elemToFind(id) ;
+        typename ElementVec::iterator start = std::lower_bound(v_.begin(), v_.end(), elemToFind);
+        typename ElementVec::iterator end = std::upper_bound(v_.begin(), v_.end(), elemToFind);
         if (start != v_.end() && start != end) {
             v_.erase(start, end);
         }
+#if YADSL_TEST_IDVALUEVECTOR
+        wxASSERT(IsSorted());
+#endif
     }
 
     /** @brief Стереть элемент, используя заданный итератор.
     */
     void Erase(typename ElementVec::iterator& pos) {
         v_.erase(pos);
+#if YADSL_TEST_IDVALUEVECTOR
+        wxASSERT(IsSorted());
+#endif
     }
 
     /** @brief Возвращает размер вектора. */
@@ -202,8 +282,11 @@ public:
 
 //-----------------------------------------------------------------------------
 
+} // end of yadsl
+
 #if 0 // test code
-#include <iostream>
+{
+    #include <iostream>
 #include <stdio.h> // printf()
 #include <wx/wx.h>
 
@@ -218,7 +301,8 @@ int Random(int high) {
     return high * k;
 }
 
-void PrintVector(const yadsl::IdValueVector<float>& v, const char* comment = 0) {
+template<typename V>
+void PrintVector(const V& v, const char* comment = 0) {
     if (comment == 0) printf("v: ");
     else printf("%s. v: ", comment);
     for (size_t i = 0; i < v.Size(); i++) {
@@ -228,196 +312,62 @@ void PrintVector(const yadsl::IdValueVector<float>& v, const char* comment = 0) 
     printf("\n");
 }
 
-// Распечатать значения элементов буфера, которые будут вставляться в вектор
-void PrintBufToPut(const unsigned int* a, const std::vector<unsigned int>& indexSeq) {
-    printf("  selected values from buffer: ");
-    for (size_t i = 0; i < indexSeq.size(); i++)  {
-        printf("%d, ", a[indexSeq[i]]);
-    }
-    printf("\n");
-}
-
-void PrintBuf(const unsigned int* a, unsigned int bufSize) {
-    printf("buf: ");
-    for (size_t i = 0; i < bufSize; i++)  {
-        printf("%d, ", a[i]);
-    }
-    printf("\n");
-}
-
-void Test1() {
+void Test() {
     yadsl::IdValueVector<float> v;
-
-    const unsigned int kBUF_SIZE = 50;
-    const unsigned int kMAX_INDEX = kBUF_SIZE - 1;
-    unsigned int ids[kBUF_SIZE];
-
-    // Наполняем вектор идентификаторами [0, 50)
-    for (unsigned int i = kBUF_SIZE; i > 0 ; i--) {
-        v.Insert(i - 1, 0.0f);
+    yadsl::uint a[] = {10, 12, 5, 3, 8, 1, 17};
+    for (size_t i = 0; i < sizeof(a) / sizeof(yadsl::uint); i++) {
+        v.Insert(a[i], 0.0);
     }
-    PrintVector(v, "Vector initialized by [0, 50)"); //
+    PrintVector(v, "Vector filled");
 
-    // Наполняем буфер, стирая вектор
-    for (unsigned int i = 0 ; i < kBUF_SIZE; i++) {
-        ids[i] = v.Erase(i).GetId();
-    }
-    PrintVector(v, "Vector erased while buffer filling"); // Не должно остаться ни одного элемента
-    PrintBuf(ids, kBUF_SIZE); // 0, 1 ,... , 49
+    v.Erase(10);
+    v.Erase(3);
 
+    PrintVector(v, "3, 10 was erased from vector");
 
-    std::vector<unsigned int> indexSeq;
-    const int cPass = 10;
-    for (int iPass = 0 ; iPass < cPass; iPass++) {
-        // Сколько элементов добавить в вектор
-        unsigned int cToPut = Random(kBUF_SIZE / 3); // аксимум 1/3 от общего числа элементов в буфере ids
-        indexSeq.clear();
-        // Наполняем контейнер индексов
-        while(indexSeq.size() < cToPut) {
-            unsigned int index = Random(kMAX_INDEX);
-            if (std::find(indexSeq.begin(), indexSeq.end(), index) == indexSeq.end()) {
-                indexSeq.push_back(index);
-            }
-        }
-        printf("%d pass\n", iPass);
-        PrintBufToPut(ids, indexSeq);
-        // Вставляем выбранные идентификаторы в вектор
-        for (size_t i = 0; i < indexSeq.size(); i++) {
-            unsigned int index = indexSeq[i];
-            v.Insert(ids[index], 0);
-        }
-        PrintVector(v, "Vector was filled from buffer using index sequence");
-        printf("\n");
+    v.Insert(4, 0.0);
+    v.Insert(20, 0.0);
+    v.Insert(11, 0.0);
 
-        // Наполняем буфер, стирая вектор
-        for (unsigned int i = 0 ; i < indexSeq.size(); i++) {
-            unsigned int index = indexSeq[i];
-            ids[index] = v[i].GetId();
-        }
-        v.Clear();
-        PrintVector(v, "Vector erased while buffer filling"); // Не должно остаться ни одного элемента
-        PrintBuf(ids, kBUF_SIZE); //
-
-    }
-
-    for (unsigned int i = 0 ; i < kBUF_SIZE; i++) {
-        unsigned int index = i;
-        v.Insert(ids[index], 0);
-    }
-    PrintBuf(ids, kBUF_SIZE);
-    PrintVector(v);
-
-}
-
-// Сгенерировать массив имен
-void GenerateNames(std::vector<std::string>& names, size_t n) {
-    std::vector<char> chars;
-    for (char c = 'a'; c < 'z'; c++ ) {
-        chars.push_back(c);
-    }
-
-    size_t kMaxLength = 10;
-    names.clear();
-    while (names.size() < n) {
-        std::string s;
-        size_t l = Random(kMaxLength);
-        if (l == 0) l++;
-        while (s.length() < l) {
-            s.push_back(chars[Random(chars.size() - 1)]);
-        }
-        names.push_back(s);
-    }
-
+    PrintVector(v, "4, 20, 11 was inserted to vector");
 }
 
 void Test2() {
-
-    std::vector<std::string> names;
-    yadsl::IdValueVector<std::string> v;
-
-    for (int pass = 0; pass < 10; pass++) {
-        GenerateNames(names, 40); // сгенерировать 20 имен
-        size_t cToPut = Random(names.size() / 4);
-        size_t vOldSize = v.Size();
-        while (v.Size() - vOldSize < cToPut) {
-            size_t iName = Random(names.size() - 1);
-            v.Insert(iName + pass * names.size(), names[iName]);
-            //printf("putting: %d -- \"%s\"\n", iName, names[iName].c_str());
-        }
-
-        size_t cToErase = Random(cToPut / 2);
-        for (size_t i = 0; i < cToErase; i++) {
-            size_t iToErase = Random(v.Size() - 1);
-            v.Erase(v[iToErase].GetId());
-        }
+    yadsl::IdValueMultiVector<float> v;
+    yadsl::uint a[] = {
+        10, 12, 5, 3, 8, 1, 17, 20,
+        12, 8, 1, 17
+    };
+    for (size_t i = 0; i < sizeof(a) / sizeof(yadsl::uint); i++) {
+        v.Insert(a[i], 0.0);
     }
+    PrintVector(v, "Vector filled");
 
+    v.Erase(10);
+    v.Erase(12);
+    v.Erase(3);
 
-    // printing
-    printf("v: \n");
-    for (size_t i = 0; i < v.Size(); i++) {
-        printf("%d -- \"%s\"\n", v[i].GetId(), v[i].GetValue().c_str());
-    }
+    PrintVector(v, "10, 12, 3 was erased from vector");
 
-}
+    v.Insert(11, 0.0);
+    v.Insert(4, 0.0);
+    v.Insert(8, 0.0);
+    v.Insert(11, 0.0);
+    v.Insert(17, 0.0);
 
-void Test3() {
-
-    std::vector<std::string> names;
-    yadsl::IdValueMultiVector<std::string> v;
-    std::multimap<yadsl::uint, std::string> m;
-
-    for (int pass = 0; pass < 10; pass++) {
-        GenerateNames(names, 40); // сгенерировать 20 имен
-        size_t cToPut = Random(names.size() / 4);
-        size_t vOldSize = v.Size();
-        while (v.Size() - vOldSize < cToPut) {
-            size_t iName = Random(names.size() - 1);
-            v.Insert(iName + pass * names.size(), names[iName]);
-            m.insert(std::make_pair(iName + pass * names.size(), names[iName]));
-            //printf("putting: %d -- \"%s\"\n", iName, names[iName].c_str());
-        }
-
-        size_t cToErase = Random(cToPut / 2);
-        for (size_t i = 0; i < cToErase; i++) {
-            size_t iToErase = Random(v.Size() - 1);
-            yadsl::uint id = v[iToErase].GetId();
-            v.Erase(id);
-
-            //
-            std::multimap<yadsl::uint, std::string>::iterator start = m.lower_bound(id);
-            std::multimap<yadsl::uint, std::string>::iterator end = m.upper_bound(id);
-            if (start != m.end() && start != end) {
-                m.erase(start, end);
-            }
-        }
-    }
-
-
-    // printing
-    printf("v: \n");
-    for (size_t i = 0; i < v.Size(); i++) {
-        printf("%d -- \"%s\"\n", v[i].GetId(), v[i].GetValue().c_str());
-    }
-
-    printf("m: \n");
-    for (std::multimap<yadsl::uint, std::string>::iterator it = m.begin(); it != m.end(); ++it) {
-        printf("%d -- \"%s\"\n", it->first, it->second.c_str());
-    }
-
+    PrintVector(v, "11, 4, 8, 11, 17 was inserted to vector");
 }
 
 int main(){
-    Test1();
+    Test2();
 
     std::cout << "Press any key to quit..." << std::endl;
     std::cin.get();
     std::cin.get();
 }
 
-#endif
-
-} // end of yadsl
+}
+#endif // end of test code
 
 #endif // YADSL_IDVALUEVECTOR_H_
 

@@ -48,6 +48,7 @@
 		<Unit filename="..\src\BaseTypes.h" />
 		<Unit filename="..\src\ClassInstMemBlockPool.h" />
 		<Unit filename="..\src\EC_Manager.h" />
+		<Unit filename="..\src\Engine.h" />
 		<Unit filename="..\src\Entity.cpp" />
 		<Unit filename="..\src\Entity.h" />
 		<Unit filename="..\src\HierNode.cpp" />

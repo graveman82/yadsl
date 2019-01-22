@@ -6,8 +6,7 @@
 Base types used by the library: integers, floats etc.
 */
 
-namespace yadsl
-{
+
 
 #ifdef _MSC_VER
 typedef __int8				int8_t;
@@ -25,7 +24,12 @@ typedef unsigned __int64	uint64_t;
 #error unsupported compiler
 #endif
 
+namespace yadsl
+{
+
 typedef uint32_t uint;
+enum { /** @brief Недопустмое значение идентификатора. */ kNoId = 0xffffffff  };
+enum { /** @brief Недопустимое значение индекса. */ kNoIndex = 0xffffffff };
 
 } // end of yadsl
 

@@ -2,75 +2,42 @@
 #include <stdio.h> // printf()
 #include <wx/wx.h>
 
-
-#include "StlListAlloc.h"
-#include <list>
+#include "ClassInstMemBlockPool.h"
 
 #include <stdlib.h> // rand()
 
+using namespace yadsl;
 
-int Random(int high) {
-    double k = (double)rand() / RAND_MAX;
-    return high * k;
-}
-
-struct Person {
+class Person {
+public:
     std::string name_;
     int age_;
 
-    Person(const char* name, int age) : name_(name), age_(age) {}
-};
-
-struct Person2 {
-    std::string name_;
-    int age_;
-    //int dummy_;
-
-    Person2(const char* name, int age) : name_(name), age_(age) {}
+    Person( const char* name, int age) : name_(name), age_(age) {}
 };
 
 void Test() {
+    ClassInstanceMemBlockPool<Person> personPool;
+    void* mem = personPool.Alloc();
+    new(mem) Person("James Cameron", 64);
+    Person* director = (Person*)mem;
+    printf("Person: %s %d years old\n",
+           director->name_.c_str(),
+           director->age_);
+    personPool.Free(director);
 
-    std::list<Person, yadsl::StlListAllocator<Person> > personList;
-    personList.push_back(Person("Marja Ivanovna", 25));
-    personList.push_back(Person("Ivan Durak", 35));
-    personList.pop_back();
-    personList.push_back(Person("Koschei", 350));
-    personList.push_back(Person("Baba Yaga", 250));
+    mem = personPool.Alloc();
+    new(mem) Person("Arnold Schwarzenegger", 71);
+    Person* actor = (Person*)mem;
+    printf("Person: %s %d years old\n",
+           actor->name_.c_str(),
+           actor->age_);
 
-
-    std::list<Person2, yadsl::StlListAllocator<Person2> > person2List;
-    person2List.push_back(Person2("Marja Ivanovna2", 25));
-    person2List.push_back(Person2("Ivan Durak2", 35));
-    person2List.pop_back();
-    person2List.push_back(Person2("Koschei2", 350));
-    person2List.push_back(Person2("Baba Yaga2", 250));
-    printf("test finished\n");
-}
-
-void Test2() {
-
-    std::list<Person, yadsl::StlListAllocator<Person> > personList;
-    personList.push_back(Person("Marja Ivanovna", 25));
-    personList.push_back(Person("Ivan Durak", 35));
-    personList.pop_back();
-    personList.push_back(Person("Koschei", 350));
-    personList.push_back(Person("Baba Yaga", 250));
-
-
-    std::list<Person2, yadsl::StlListAllocator<Person2> > person2List;
-    person2List.push_back(Person2("Marja Ivanovna2", 25));
-    person2List.push_back(Person2("Ivan Durak2", 35));
-    person2List.pop_back();
-    person2List.push_back(Person2("Koschei2", 350));
-    person2List.push_back(Person2("Baba Yaga2", 250));
-    printf("test finished\n");
+    printf("Person pool size: %d\n", personPool.AllBlockNum());
 }
 
 int main(){
-
     Test();
-    Test2();
 
     std::cout << "Press any key to quit..." << std::endl;
     std::cin.get();

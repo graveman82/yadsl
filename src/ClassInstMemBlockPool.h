@@ -1,7 +1,13 @@
 #ifndef YADSL_CLASSINSTMEMBLOCKPOOL_H_
 #define YADSL_CLASSINSTMEMBLOCKPOOL_H_
 
+
+#ifdef YADSL_USE_IDVALUEVECTOR_IN_CLASSINSTANCEMEMBLOCKPOOL
+#include "IdValueVector.h"
+#else
 #include <map>
+#include "BaseTypes.h"
+#endif
 
 #include <wx/wx.h>
 #include <wx/SharedPtr.h>
@@ -11,9 +17,43 @@
 namespace yadsl
 {
 
-#define CLASSINSTANCEMEMBLOCKPOOL_TEST 0
-/** @brief Пул блоков памяти для размещения экземпляров заданного в шаблоне типа.
+#define YADSL_TEST_CLASSINSTANCEMEMBLOCKPOOL 0
+/** @brief Пул блоков памяти для размещения экземпляров заданного в шаблоне типа. Это не обязательно классы, тип хранимых данных может быть
+и структурой и даже встроенным типом. Однако не рекомендуется размещать в пуле встроенные типы и маленькие структуры из-за больших накладных
+расходов на память.
 Вся память, выделенная из кучи экземпляром этого класса, будет автоматически возвращена в кучу при уничтожении экземпляра этого класса.
+
+Пример использования:
+@code
+class Person {
+public:
+    std::string name_;
+    int age_;
+
+    Person( const char* name, int age) : name_(name), age_(age) {}
+};
+ClassInstanceMemBlockPool<Person> personPool;
+void* mem = personPool.Alloc();
+new(mem) Person("James Cameron", 64);
+Person* director = (Person*)mem;
+printf("Person: %s %d years old\n",
+       director->name_.c_str(),
+       director->age_);
+personPool.Free(director);
+
+mem = personPool.Alloc();
+new(mem) Person("Arnold Schwarzenegger", 71);
+Person* actor = (Person*)mem;
+printf("Person: %s %d years old\n",
+       actor->name_.c_str(),
+       actor->age_);
+
+printf("Person pool size: %d\n", personPool.AllBlockNum());
+@endcode
+
+###Сборка###
+Макрос YADSL_USE_IDVALUEVECTOR_IN_CLASSINSTANCEMEMBLOCKPOOL отвечает за реализацию на основе IdValueVector. Без установки
+этого макроса пул будет собран на основе std::map.
 */
 template <typename T>
 class ClassInstanceMemBlockPool {
@@ -21,29 +61,43 @@ private:
     // Блок памяти
     struct MemBlock {
         uint8_t data_[sizeof(T)];   // непосредственно сам участок памяти
-        int id_;                    // идентификатор блока памяти
+        uint id_;                    // идентификатор блока памяти
         int fConstructed_; // флагом конструированности взята замысловатая последовательность бит (надежнее чем просто true), 0xA965
 
-        MemBlock(int id) : id_(id), fConstructed_(0) {}
-#if CLASSINSTANCEMEMBLOCKPOOL_TEST // if test on
+        MemBlock(uint id) : id_(id), fConstructed_(0) {}
+#if YADSL_TEST_CLASSINSTANCEMEMBLOCKPOOL // if test on
         ~MemBlock() { printf("MemBlock(%d) dtor\n", id_); }
 #endif
     };
 
     typedef MemBlock* PMemBlock;
-    typedef std::map<int, wxSharedPtr<MemBlock> > MemBlockMap;
+#ifdef YADSL_USE_IDVALUEVECTOR_IN_CLASSINSTANCEMEMBLOCKPOOL
+    typedef IdValueVector<wxSharedPtr<MemBlock> > MemBlockMap;
+#else
+    typedef std::map<uint, wxSharedPtr<MemBlock> > MemBlockMap;
+#endif
 
     UniqIntGenerator uig_; // генератор уникальных целочисленных идентификаторов
     MemBlockMap pool_;      // пул свободных блоков памяти
 
     // Получить указатель на память блока по его идентификатору
-    uint8_t* Mem(int blockId) {
+    uint8_t* Mem(uint blockId) {
+#ifdef YADSL_USE_IDVALUEVECTOR_IN_CLASSINSTANCEMEMBLOCKPOOL
+        IdValueVector::Element* freeBlockPos= pool_.Find(blockId);
+    #ifdef YADSL_USE_WXDEBUG
+        wxASSERT(freeBlockPos != 0);
+        wxASSERT(blockId == freeBlockPos->GetValue()->id_);
+    #endif
+        return &freeBlockPos->GetValue()->data_[0];
+
+#else // std::map
         typename MemBlockMap::iterator freeBlockPos = pool_.find(blockId);
-#ifdef YADSL_USE_WXDEBUG
+    #ifdef YADSL_USE_WXDEBUG
         wxASSERT(freeBlockPos != pool_.end());
         wxASSERT(blockId == freeBlockPos->second->id_);
-#endif
+    #endif
         return &freeBlockPos->second->data_[0];
+#endif
     }
 
 public:
@@ -52,8 +106,8 @@ public:
     @note Если в пуле не останется свободных блоков, они будут добавлены в пул из кучи.
     */
     void* Alloc() {
-        bool fUigEmpty = (uig_.Size() == 0) ? true: false;
-        int blockId = UniqIntGenerator::kNoId;
+        bool fUigEmpty = (uig_.Unused() == 0) ? true: false;
+        uint blockId = kNoId;
         if (fUigEmpty) {
             PMemBlock memBlock = new(std::nothrow) MemBlock(blockId);
             if (memBlock == 0) {
@@ -61,7 +115,11 @@ public:
             }
             blockId = uig_.Get();
             memBlock->id_ = blockId;
+#ifdef YADSL_USE_IDVALUEVECTOR_IN_CLASSINSTANCEMEMBLOCKPOOL
+            pool_.Insert(blockId, wxSharedPtr<MemBlock>(memBlock));
+#else
             pool_[blockId] = wxSharedPtr<MemBlock>(memBlock);
+#endif
         }
         else {
             blockId = uig_.Get();
@@ -86,7 +144,7 @@ public:
         if (fEraseMemContent) {
             memset(&block->data_[0], 0, sizeof(block->data_));
         }
-#if CLASSINSTANCEMEMBLOCKPOOL_TEST // if test on
+#if YADSL_TEST_CLASSINSTANCEMEMBLOCKPOOL // if test on
         strcpy((char*)block->data_, "unnamed");
 #endif
     }

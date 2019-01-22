@@ -24,11 +24,15 @@ namespace yadsl
 размещение сущности в связанных с функционалом компоненты контейнерах.
 
 EC - Entity Component
+
+###Сборка###
+Макрос YADSL_USE_IDVALUEVECTOR_IN_ENTITY отвечает за реализацию на основе IdValueMultiVector. Без установки
+этого макроса класс будет собран на основе std::map.
+
 */
 class Entity {
 public:
     static const uint kComponentIdNotAssigned_; // недопустимое значение идентификатора компоненты сущности - число, обозначающее, что идентификатор не назначен
-    enum { /** @brief Недопустимое значение индекса. */ kNoIndex = 0xffffffff };
 
     typedef void* PVoid;
 
@@ -54,9 +58,24 @@ private:
     int id_; // идентификатор сущности
     ComponentMap componentMap_;     // словарь доступа к составляющим частям (компонентам)
 
+    /** @brief Поиск компоненты среди данных сущности.
+    @param [out] it - переменная, куда сохраняется итератор элемента вектора найденной компоненты.
+    @param [out] item - переменная, куда сохраняется адрес пункта компоненты.
+    @param componentId - идентификатор компоненты.
+    @param componentIndex - индекс компоненты среди компонент такого же типа. Передать kNoIndex, если индекс не важен, а важен только факт наличия компоненты вообще.
+    (@see kNoIndex)
+    @return Возвращает true, если компонента найдена и false в обратном случае.
+    */
+#ifdef YADSL_USE_IDVALUEVECTOR_IN_ENTITY
+    bool FindComponent(ComponentMap::ElementVec::iterator& it,  const ComponentItem** ppItem, uint componentId, uint componentIndex = kNoIndex);
+#else
+    bool FindComponent(ComponentMap::iterator& it,              const ComponentItem** ppItem, uint componentId, uint componentIndex = kNoIndex);
+#endif
 public:
 
     /** @brief Сгенерировать уникальный идентификатор для компоненты сущности.
+
+    @note используется менеджером компоненты!
     @return целое больше нуля. Нуль обозначает, что идентификатор не назначен.
     */
     static uint GenerateComponentId();
@@ -64,7 +83,7 @@ public:
     Entity();
     ~Entity();
 
-    /// Получить идентификатор этой сущности
+    /// Получить идентификатор экземпляра этой сущности
     int GetId() const { return id_; }
 
     /** @brief Проверка наличия компоненты среди данных сущности.
@@ -99,6 +118,8 @@ public:
     @param componentIndex - индекс компоненты среди компонент такого же типа.
     */
     void EraseComponent(uint componentId, uint componentIndex);
+
+    bool Empty() const;
 
 private:
     Entity(const Entity&);
